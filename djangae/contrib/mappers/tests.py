@@ -152,7 +152,7 @@ class TestDeferIteration(TestCase):
         impossible for querysets containing inequality filters.
         """
         queryset = TestNode.objects.filter(counter__lt=11)
-        defer_iteration(queryset, add_onehundred)
+        defer_iteration(queryset, add_onehundred, shard_size=5, order_by=['counter'])
 
         self.assertTrue(sum(TestNode.objects.values_list("counter", flat=True)))
 
@@ -160,5 +160,5 @@ class TestDeferIteration(TestCase):
 
         self.assertEqual(
             sum([(x+1) + 100 for x in xrange(10)]),
-            sum(queryset.values_list("counter", flat=True))
+            sum(TestNode.objects.values_list("counter", flat=True))
         )
