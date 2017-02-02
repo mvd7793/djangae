@@ -23,14 +23,10 @@ def _process_shard(model, instance_ids, callback):
     logger.debug("Done processing shard.")
 
 
-def _shard(model, query, callback, shard_size, order_by, queue, offset=0):
+def _shard(model, query, callback, shard_size, queue, offset=0):
     logger.debug("Sharding PKs for model %s into tasks on queue %s", model.__name__, queue)
     keys_queryset = model.objects.all()
     keys_queryset.query = query
-
-    order_by = order_by or []
-    order_by.append('pk')
-    keys_queryset = keys_queryset.order_by(*order_by)
     keys_queryset = keys_queryset.values_list("pk", flat=True)
 
     # Keep iterating until we are done, or until we might be hitting the task deadline
@@ -38,7 +34,7 @@ def _shard(model, query, callback, shard_size, order_by, queue, offset=0):
     max_shards_to_defer_in_this_task = 250  # number which we think we can safely do in 10 minutes
     while True:
         try:
-            ids = list(keys_queryset[offset:offset + shard_size])
+            ids = list(keys_queryset.all()[offset:offset + shard_size])
             if not ids:
                 # We're done!
                 logger.debug(
@@ -52,7 +48,7 @@ def _shard(model, query, callback, shard_size, order_by, queue, offset=0):
             shards_deferred += 1
 
             # Set the offset to the last pk
-            offset = offset + shard_size
+            offset += shard_size
 
             if shards_deferred >= max_shards_to_defer_in_this_task:
                 logger.debug("Redeferring. Offset PK: %s", offset)
@@ -74,14 +70,13 @@ def _shard(model, query, callback, shard_size, order_by, queue, offset=0):
             return
 
 
-def defer_iteration(queryset, callback, shard_size=500, order_by=None, _queue="default", _target=None):
+def defer_iteration(queryset, callback, shard_size=500, _queue="default", _target=None):
     """
         Shards background tasks to call 'callback' with each instance in queryset
 
         - `queryset` - The queryset to iterate
         - `callback` - A callable which accepts an instance as a parameter
         - `shard_size` - The number instances to process per shard (default 500)
-        - `order_by` - List of orderings needed for any inequality filters used in the queryset
         - `_queue` - The name of the queue to run the shards on
 
         Note, your callback must be indempotent, shards may retry and your callback
@@ -91,6 +86,6 @@ def defer_iteration(queryset, callback, shard_size=500, order_by=None, _queue="d
     """
     # We immediately defer the _shard function so that we don't hold up execution
     defer(
-        _shard, queryset.model, queryset.query, callback, shard_size, order_by, _queue,
+        _shard, queryset.model, queryset.query, callback, shard_size, _queue,
         _queue=_queue, _target=_target,
     )
