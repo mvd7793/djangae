@@ -146,7 +146,9 @@ class RelatedIteratorManagerBase(object):
                 was passed in so we can convince Django to do the right thing when merging
             """
             for related_thing in queryset:
-                for i, matcher in enumerate(matchers[related_thing.pk]):
+                # Allow nested prefetching from other RelatedSetFields
+                pk = int(related_thing.pk)
+                for i, matcher in enumerate(matchers[pk]):
                     if i == 0:
                         # Optimisation to prevent unnecessary extra copy
                         ret = related_thing
